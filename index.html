@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通勤チェッカー V4.2</title>
+
+<style>
+:root{
+  --bg:#050816;
+  --card:#111827;
+  --text:#f8fafc;
+  --muted:#94a3b8;
+  --green:#22c55e;
+  --red:#ef4444;
+  --blue:#38bdf8;
+}
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+  margin:0;
+  padding:18px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:linear-gradient(180deg,#020617,#0f172a);
+  color:var(--text);
+}
+
+.app{
+  max-width:520px;
+  margin:auto;
+}
+
+h1{
+  font-size:24px;
+  margin:8px 0 18px;
+}
+
+.panel,
+.card,
+.editBox{
+  background:rgba(17,24,39,.94);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:22px;
+  padding:16px;
+  margin-bottom:14px;
+  box-shadow:0 12px 30px rgba(0,0,0,.25);
+}
+
+.tabs{
+  display:flex;
+  gap:8px;
+  margin-bottom:14px;
+}
+
+button{
+  border:none;
+  border-radius:999px;
+  padding:9px 14px;
+  background:#334155;
+  color:white;
+  font-weight:700;
+}
+
+.active{
+  background:linear-gradient(135deg,#2563eb,#38bdf8);
+}
+
+input{
+  width:130px;
+  padding:8px;
+  border-radius:12px;
+  border:1px solid #334155;
+  background:#020617;
+  color:white;
+  font-size:18px;
+}
+
+.label,
+.sub{
+  color:var(--muted);
+  font-size:13px;
+}
+
+.card{
+  cursor:pointer;
+}
+
+.current{
+  border:2px solid var(--green);
+  background:linear-gradient(180deg,rgba(34,197,94,.16),rgba(17,24,39,.95));
+}
+
+.badge{
+  display:inline-block;
+  font-size:12px;
+  color:#020617;
+  background:var(--green);
+  padding:3px 8px;
+  border-radius:999px;
+  font-weight:800;
+  margin-bottom:8px;
+}
+
+.trainTitle{
+  font-size:26px;
+  font-weight:900;
+}
+
+.detail{
+  display:none;
+  margin-top:16px;
+}
+
+.stationFlow{
+  text-align:center;
+  color:var(--muted);
+  line-height:1.8;
+  margin:10px 0 14px;
+}
+
+.stationFlow b{
+  color:var(--text);
+  font-size:18px;
+}
+
+.branchWrap{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+.branch{
+  border-radius:18px;
+  padding:16px 12px;
+  border:1px solid rgba(255,255,255,.08);
+  text-align:center;
+}
+
+.fast{
+  background:rgba(239,68,68,.20);
+}
+
+.safe{
+  background:rgba(34,197,94,.20);
+}
+
+.bigTime{
+  font-size:24px;
+  font-weight:900;
+  line-height:1.45;
+}
+
+textarea{
+  width:100%;
+  height:120px;
+  border-radius:14px;
+  padding:10px;
+  background:#020617;
+  color:white;
+  border:1px solid #334155;
+}
+
+.small{
+  font-size:12px;
+  color:var(--muted);
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<h1>🚃 Commute Checker</h1>
+
+<div class="panel">
+  <div class="tabs">
+    <button id="goBtn" onclick="setMode('go')">出勤</button>
+    <button id="backBtn" onclick="setMode('back')">退勤</button>
+  </div>
+
+  <div class="label">現在時刻</div>
+  <input type="time" id="timeInput">
+  <button onclick="render()">更新</button>
+  <button onclick="toggleEdit()">ダイヤ編集</button>
+</div>
+
+<div id="editArea" class="editBox" style="display:none">
+  <b>ダイヤ編集</b>
+  <p class="small">1行に1時刻。例：07:42</p>
+
+  <p id="mainLabel"></p>
+  <textarea id="mainEdit"></textarea>
+
+  <p id="transferLabel"></p>
+  <textarea id="transferEdit"></textarea>
+
+  <button onclick="saveTimetable()">保存</button>
+  <button onclick="resetTimetable()">初期化</button>
+</div>
+
+<div id="list"></div>
+
+</div>
+
+<script>
+let mode = "go";
+
+const DEFAULT = {
+go:{
+ mainLabel:"あびこ発",
+ transferLabel:"動物園前発",
+ main:[
+"06:01","06:06","06:10","06:14","06:18","06:22","06:26","06:30",
+"06:34","06:38","06:43","06:46","06:48","06:51","06:53","06:55","06:57",
+"07:00","07:04","07:06","07:09","07:13","07:15","07:18","07:22",
+"07:24","07:27","07:31","07:33","07:36","07:40","07:42","07:45",
+"07:47","07:49","07:54","07:56","07:58",
+"08:03","08:05","08:07","08:12","08:14","08:16","08:21","08:23",
+"08:25","08:30"
+ ],
+ transfer:[
+"06:00","06:09","06:18","06:26","06:32","06:39","06:45","06:51","06:56",
+"07:05","07:09","07:13","07:18","07:27","07:32","07:36","07:41",
+"07:44","07:51","07:55","07:58",
+"08:02","08:09","08:12","08:16","08:19","08:26","08:33","08:37",
+"08:44","08:47","08:51","08:58"
+ ],
+ mainToTransfer:12,
+ transferToGoal:23,
+ startName:"あびこ",
+ transferName:"動物園前",
+ goalName:"淡路"
+},
+
+back:{
+ mainLabel:"淡路発",
+ transferLabel:"動物園前発",
+ main:[
+"17:02","17:07","17:11","17:20","17:26","17:34","17:40","17:46","17:54","17:58",
+"18:05","18:09","18:15","18:20","18:27","18:34","18:40","18:47","18:54",
+"19:00","19:06","19:14","19:20","19:27","19:34","19:40","19:45","19:55",
+"20:00","20:06","20:15","20:23","20:33","20:40","20:46","20:56",
+"21:05","21:17","21:26","21:36","21:45","21:54",
+"22:06","22:19","22:30","22:42","22:54",
+"23:06","23:20","23:31","23:44","24:02"
+ ],
+ transfer:[
+"17:04","17:11","17:19","17:25","17:30","17:35","17:40","17:45","17:50","17:55",
+"18:00","18:05","18:10","18:15","18:20","18:25","18:30","18:35","18:40","18:45","18:50","18:55","18:57",
+"19:00","19:05","19:10","19:15","19:20","19:22","19:25","19:30","19:35","19:40","19:42","19:45","19:47","19:50","19:55","19:58",
+"20:00","20:04","20:10","20:14","20:20","20:26","20:32","20:35","20:38","20:45","20:48","20:51","20:58",
+"21:04","21:08","21:15","21:23","21:31","21:35","21:39","21:47","21:55","21:59",
+"22:03","22:11","22:19","22:27","22:36","22:44","22:48","22:53","22:57",
+"23:07","23:17","23:27","23:32","23:37","23:42","23:47","23:52"
+ ],
+ mainToTransfer:23,
+ transferToGoal:12,
+ startName:"淡路",
+ transferName:"動物園前",
+ goalName:"あびこ"
+}
+};
+
+let data = loadData();
+
+function loadData(){
+  const saved = localStorage.getItem("commuteV3");
+  return saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(DEFAULT));
+}
+
+function saveData(){
+  localStorage.setItem("commuteV3", JSON.stringify(data));
+}
+
+function toMin(t){
+  let [h,m] = t.split(":").map(Number);
+  if(h === 24) h = 0;
+  return h * 60 + m;
+}
+
+function toTime(min){
+  min = (min + 1440) % 1440;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+
+  return String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0");
+}
+
+function setMode(m){
+  mode = m;
+
+  document.getElementById("goBtn").className =
+    m === "go" ? "active" : "";
+
+  document.getElementById("backBtn").className =
+    m === "back" ? "active" : "";
+
+  render();
+  updateEditLabels();
+}
+
+function toggle(id){
+  const el = document.getElementById(id);
+  el.style.display =
+    el.style.display === "block" ? "none" : "block";
+}
+
+function normalizeLines(text){
+  return text
+    .split(/\n/)
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(x => x.split(/\s+/)[0]);
+}
+
+function pickBranches(mainTime){
+  const d = data[mode];
+
+  const arrive =
+    toMin(mainTime) + d.mainToTransfer;
+
+  const candidates =
+    d.transfer.filter(t => toMin(t) >= arrive);
+
+  const fast =
+    candidates[0];
+
+  const safe =
+    candidates[1] || candidates[0];
+
+  return {
+    arrive,
+    fast,
+    safe
+  };
+}
+
+function branchHtml(cls, dep, arrive){
+
+  if(!dep){
+    return "";
+  }
+
+  const d = data[mode];
+
+  const wait =
+    toMin(dep) - arrive;
+
+  const goalTime =
+    toTime(toMin(dep) + d.transferToGoal);
+
+  return `
+  <div class="branch ${cls}">
+    <div class="sub" style="margin-bottom:10px;">
+      乗換 ${wait}分
+    </div>
+
+    <div class="bigTime">
+      ${dep}
+      <br>
+      ↓
+      <br>
+      ${d.goalName} ${goalTime}
+    </div>
+  </div>
+  `;
+}
+
+function buildDetail(mainTime){
+
+  const d = data[mode];
+
+  const b =
+    pickBranches(mainTime);
+
+  return `
+  <div class="stationFlow">
+    <b>${d.transferName} ${toTime(b.arrive)}着</b>
+  </div>
+
+  <div class="branchWrap">
+    ${branchHtml("fast", b.fast, b.arrive)}
+    ${branchHtml("safe", b.safe, b.arrive)}
+  </div>
+  `;
+}
+
+function render(){
+
+  const d = data[mode];
+
+  const now =
+    document.getElementById("timeInput").value;
+
+  const nowMin =
+    toMin(now);
+
+  let idx =
+    d.main.findIndex(t => toMin(t) >= nowMin);
+
+  if(idx < 0){
+    idx = d.main.length - 1;
+  }
+
+  const trains =
+    [d.main[idx-1], d.main[idx], d.main[idx+1]]
+    .filter(Boolean);
+
+  const labels =
+    ["①","②","③"];
+
+  document.getElementById("list").innerHTML =
+    trains.map((t,i) => `
+      <div class="card ${i===1 ? "current" : ""}">
+        ${i===1 ? '<div class="badge">NEXT</div>' : ''}
+
+        <div onclick="toggle('detail${i}')">
+          <div class="trainTitle">
+            ${labels[i]} ${d.startName} ${t}発
+          </div>
+        </div>
+
+        <div class="detail" id="detail${i}">
+          ${buildDetail(t)}
+        </div>
+      </div>
+    `).join("");
+}
+
+function updateEditLabels(){
+
+  const d = data[mode];
+
+  document.getElementById("mainLabel").innerText =
+    d.mainLabel;
+
+  document.getElementById("transferLabel").innerText =
+    d.transferLabel;
+
+  document.getElementById("mainEdit").value =
+    d.main.join("\n");
+
+  document.getElementById("transferEdit").value =
+    d.transfer.join("\n");
+}
+
+function toggleEdit(){
+  const el =
+    document.getElementById("editArea");
+
+  el.style.display =
+    el.style.display === "block" ? "none" : "block";
+
+  updateEditLabels();
+}
+
+function saveTimetable(){
+
+  data[mode].main =
+    normalizeLines(document.getElementById("mainEdit").value);
+
+  data[mode].transfer =
+    normalizeLines(document.getElementById("transferEdit").value);
+
+  saveData();
+  render();
+
+  alert("保存しました");
+}
+
+function resetTimetable(){
+
+  if(!confirm("このモードのダイヤを初期化しますか？")){
+    return;
+  }
+
+  data[mode].main =
+    [...DEFAULT[mode].main];
+
+  data[mode].transfer =
+    [...DEFAULT[mode].transfer];
+
+  saveData();
+  updateEditLabels();
+  render();
+}
+
+const now =
+  new Date();
+
+document.getElementById("timeInput").value =
+  String(now.getHours()).padStart(2,"0")
+  + ":"
+  + String(now.getMinutes()).padStart(2,"0");
+
+setMode("go");
+</script>
+
+</body>
+</html>
